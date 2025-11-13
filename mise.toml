@@ -8,6 +8,9 @@ lua = "5.4"
 steampipe = "2.3.2"
 stylua = "latest"
 
+[settings]
+experimental = true
+
 [tasks.format]
 description = "Format Lua scripts"
 run = "stylua metadata.lua hooks/"
