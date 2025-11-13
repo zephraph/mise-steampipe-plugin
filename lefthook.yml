@@ -1,0 +1,11 @@
+pre-commit:
+  commands:
+    luacheck:
+      glob: "**/*.lua"
+      run: luarocks install luacheck --local || true && ~/.luarocks/bin/luacheck {staged_files}
+    stylua:
+      glob: "**/*.lua"
+      run: stylua {staged_files}
+    actionlint:
+      glob: ".github/workflows/*.{yml,yaml}"
+      run: actionlint {staged_files}
