@@ -25,7 +25,7 @@ function PLUGIN:BackendInstall(ctx)
     -- Example implementations (choose/modify based on your backend):
 
     -- Example 1: Package manager installation (like npm, pip)
-    local install_cmd = "<BACKEND> install " .. tool .. "@" .. version .. " --target " .. install_path
+    local install_cmd = "steampipe plugin install " .. tool .. "@" .. version .. " --installtarget " .. install_path
     local result = cmd.exec(install_cmd)
 
     if result:match("error") or result:match("failed") then
@@ -40,7 +40,7 @@ function PLUGIN:BackendInstall(ctx)
     -- Construct download URL (adjust based on your backend's URL pattern)
     local platform = RUNTIME.osType:lower()
     local arch = RUNTIME.archType
-    local download_url = "https://releases.<BACKEND>.org/" .. tool .. "/" .. version .. "/" .. tool .. "-" .. platform .. "-" .. arch .. ".tar.gz"
+    local download_url = "https://releases.steampipe-plugin.org/" .. tool .. "/" .. version .. "/" .. tool .. "-" .. platform .. "-" .. arch .. ".tar.gz"
 
     -- Download the tool
     local temp_file = install_path .. "/" .. tool .. ".tar.gz"
@@ -84,15 +84,15 @@ function PLUGIN:BackendInstall(ctx)
     --[[
     if RUNTIME.osType == "Darwin" then
         -- macOS-specific installation
-        local macos_cmd = "<BACKEND> install-macos " .. tool .. "@" .. version .. " " .. install_path
+        local macos_cmd = "steampipe-plugin install-macos " .. tool .. "@" .. version .. " " .. install_path
         cmd.exec(macos_cmd)
     elseif RUNTIME.osType == "Linux" then
         -- Linux-specific installation
-        local linux_cmd = "<BACKEND> install-linux " .. tool .. "@" .. version .. " " .. install_path
+        local linux_cmd = "steampipe-plugin install-linux " .. tool .. "@" .. version .. " " .. install_path
         cmd.exec(linux_cmd)
     elseif RUNTIME.osType == "Windows" then
         -- Windows-specific installation
-        local windows_cmd = "<BACKEND> install-windows " .. tool .. "@" .. version .. " " .. install_path
+        local windows_cmd = "steampipe-plugin install-windows " .. tool .. "@" .. version .. " " .. install_path
         cmd.exec(windows_cmd)
     else
         error("Unsupported platform: " .. RUNTIME.osType)
