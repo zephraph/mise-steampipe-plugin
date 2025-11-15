@@ -4,33 +4,43 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a mise backend plugin for managing Steampipe plugins. Unlike standard mise tool plugins that manage a single tool, backend plugins manage **multiple tools** using the `plugin:tool` format (e.g., `steampipe-plugin:aws`, `steampipe-plugin:github`).
+This is a mise backend plugin for managing Steampipe plugins. Steampipe plugins are database extensions (not standalone executables) that provide SQL interfaces to cloud APIs and services.
 
-Steampipe plugins are database extensions (not standalone executables) that provide SQL interfaces to cloud APIs and services. They are distributed as OCI images from hub.steampipe.io and developed under the turbot organization on GitHub.
+**Installation location**: Plugins are installed to steampipe's default location (`~/.steampipe`) unless the user sets `STEAMPIPE_INSTALL_DIR` environment variable.
+
+Users interact with it as:
+- `mise use steampipe-plugin:aws@1.26.0` - Install AWS plugin
+- `mise use steampipe-plugin:github@1.7.0` - Install GitHub plugin
+
+Steampipe CLI is installed separately (recommended: `mise use -g ubi:turbot/steampipe`).
 
 ## Architecture
 
 ### Backend Plugin System
 
-The plugin implements three core hooks required by mise's vfox-style backend architecture:
+The plugin implements three backend hooks:
 
 1. **`hooks/backend_list_versions.lua`**: Queries GitHub API for releases from `turbot/steampipe-plugin-{name}` repositories. Strips 'v' prefix and filters for semantic versions only.
 
 2. **`hooks/backend_install.lua`**: 
-   - Locates the steampipe binary via `mise where steampipe` (since it's not in PATH during install)
-   - Executes `steampipe plugin install <tool>@<version> --install-dir <path> --skip-config`
-   - Defaults install path to `CWD/.steampipe` for project-local installations
-   - The `--install-dir` flag is a global steampipe flag (not a subcommand flag)
+   - Locates steampipe binary via multiple strategies (PATH, mise where ubi:turbot/steampipe, mise where steampipe)
+   - Checks both `{install_dir}/steampipe` and `{install_dir}/bin/steampipe` for the binary
+   - Executes `steampipe plugin install --skip-config <tool>@<version>`
+   - If `STEAMPIPE_INSTALL_DIR` env var is set, adds `--install-dir $STEAMPIPE_INSTALL_DIR`
+   - Otherwise lets steampipe use its default location (~/.steampipe)
 
-3. **`hooks/backend_exec_env.lua`**: Sets `STEAMPIPE_INSTALL_DIR` environment variable to tell steampipe where to find installed plugins.
+3. **`hooks/backend_exec_env.lua`**: 
+   - Returns empty env_vars array
+   - Does NOT set STEAMPIPE_INSTALL_DIR - respects whatever the user has set or steampipe's default
 
 ### Key Implementation Details
 
+- **Installation location**: Uses steampipe's default `~/.steampipe` unless user sets `STEAMPIPE_INSTALL_DIR`
 - **Plugin naming**: Tool name `aws` maps to GitHub repo `turbot/steampipe-plugin-aws`
-- **Version source**: GitHub releases API, not OCI registry (OCI registry queries are complex and slow)
+- **Version source**: GitHub releases API (not OCI registry - too complex/slow)
 - **Installation timeout**: Default 10s may be too short; installations can take 30-60s to download OCI images
-- **No binary execution**: Steampipe plugins don't provide executables; users run `mise x steampipe-plugin:aws -- steampipe query "..."`
-- **Environment variables**: The plugin only needs to set `STEAMPIPE_INSTALL_DIR`; steampipe handles the rest
+- **No binary execution**: Steampipe plugins don't provide executables; users run `steampipe query "..."`
+- **Binary detection**: Handles both ubi-style installations (binary at root) and traditional (binary in bin/)
 
 ## Development Commands
 
@@ -38,7 +48,7 @@ All commands require `MISE_EXPERIMENTAL=1` or `mise settings experimental=true` 
 
 ### Testing
 ```bash
-mise run test          # Run integration tests (links plugin, tests list/install/env)
+mise run test          # Run integration tests
 mise run lint          # Run all linters (luacheck, stylua check, actionlint)
 mise run ci            # Run lint + test (same as CI)
 ```
@@ -51,11 +61,10 @@ mise run fix           # Run luacheck and stylua auto-fix
 
 ### Manual testing during development
 ```bash
-mise plugin link --force steampipe-plugin .           # Link local plugin
-mise ls-remote steampipe-plugin:aws                   # Test version listing
-mise install steampipe-plugin:github@1.7.0            # Test installation
-mise where steampipe-plugin:github@1.7.0              # Check install path
-mise x steampipe-plugin:github@1.7.0 -- sh -c 'echo $STEAMPIPE_INSTALL_DIR'  # Verify env
+mise plugin link --force steampipe-plugin .               # Link local plugin
+mise ls-remote steampipe-plugin:aws                       # Test version listing
+mise install steampipe-plugin:github@1.7.0                # Test installation
+ls -la ~/.steampipe/plugins                               # Verify install location
 ```
 
 ### Pre-commit hooks
@@ -65,21 +74,29 @@ lefthook install       # Install git hooks (runs luacheck, stylua, actionlint on
 
 ## Important Constraints
 
-### Steampipe Binary Availability
-During the install hook, steampipe is not in PATH. The implementation uses:
-```lua
-cmd.exec("command -v steampipe 2>/dev/null || mise where steampipe 2>/dev/null | xargs -I {} echo {}/bin/steampipe")
-```
-This falls back to locating steampipe via mise if it's not in PATH.
+### Respecting STEAMPIPE_INSTALL_DIR
+The plugin checks for `STEAMPIPE_INSTALL_DIR` environment variable and passes it through to steampipe if set. Otherwise, steampipe uses its default `~/.steampipe` location. The plugin does NOT force a specific location.
+
+### Steampipe Binary Detection
+The implementation tries multiple strategies to find the steampipe binary:
+1. Check PATH with `command -v steampipe`
+2. Try `mise where ubi:turbot/steampipe` (for ubi installations)
+3. Try `mise where steampipe` (for other mise installations)
+4. For each mise location, check both `/steampipe` (ubi style) and `/bin/steampipe` (traditional)
+5. Fallback to just `steampipe` command
 
 ### Plugin Installation Behavior
-Steampipe's `--install-dir` flag creates a full steampipe directory structure (config/, plugins/, internal/, logs/) at the specified path. The actual plugin files go into `<install-dir>/plugins/`.
+Steampipe's `plugin install` command creates a directory structure at the install location:
+- `{install-dir}/config/`
+- `{install-dir}/plugins/` - actual plugin files
+- `{install-dir}/internal/`
+- `{install-dir}/logs/`
 
 ### Test Expectations
 The test suite (`mise-tasks/test`) verifies:
 1. Version listing returns semantic versions
-2. Installation succeeds and creates `<install-path>/plugins/` directory
-3. `STEAMPIPE_INSTALL_DIR` is set correctly via `BackendExecEnv`
+2. Installation succeeds
+3. Plugins directory exists at `${STEAMPIPE_INSTALL_DIR:-$HOME/.steampipe}/plugins`
 
 Tests use `steampipe-plugin:github@1.7.0` as the test plugin.
 
@@ -89,7 +106,7 @@ Backend hooks have access to:
 - `cmd` - Execute shell commands via `cmd.exec()`
 - `http` - HTTP client with `http.get()` and `http.download()`
 - `json` - JSON parsing with `json.decode()` and `json.encode()`
-- `file` - File operations (though not heavily used in this plugin)
+- `file` - File operations (though not heavily used)
 
 Runtime info available via `RUNTIME.osType`, `RUNTIME.archType`.
 
@@ -98,14 +115,23 @@ Runtime info available via `RUNTIME.osType`, `RUNTIME.archType`.
 ### Adding support for non-turbot plugins
 Currently hardcoded to `turbot` org. To support other orgs, modify `backend_list_versions.lua` and `backend_install.lua` to parse org from tool name (e.g., `someorg/aws` format).
 
+### Supporting different steampipe binary locations
+Update the `variants` array and `candidates` array in `backend_install.lua` to check additional locations.
+
 ### Adjusting timeout handling
 If installations timeout, the issue is in mise's default 10s timeout for hook execution, not in the Lua code. This is a mise limitation.
 
-### Changing default install location
-Modify the install path default in `backend_install.lua`:
-```lua
-if not install_path or install_path == "" then
-    local cwd = os.getenv("PWD") or "."
-    install_path = cwd .. "/.steampipe"  -- Change this
-end
+## Why Not Set STEAMPIPE_INSTALL_DIR?
+
+The plugin lets steampipe manage its own default location (`~/.steampipe`) and only intervenes if the user explicitly sets `STEAMPIPE_INSTALL_DIR`. This provides:
+
+1. **Simplicity**: Works out of the box with steampipe's defaults
+2. **User control**: Users can override by setting env var
+3. **Compatibility**: Doesn't interfere with existing steampipe setups
+4. **Shared plugins**: All projects can share the same plugin installations unless customized
+
+Users who want project-specific plugins can set `STEAMPIPE_INSTALL_DIR` in their `.mise.toml`:
+```toml
+[env]
+STEAMPIPE_INSTALL_DIR = "./.steampipe"
 ```

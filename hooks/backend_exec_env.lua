@@ -9,20 +9,17 @@ function PLUGIN:BackendExecEnv(ctx)
 
     local env_vars = {}
 
-    -- Set STEAMPIPE_INSTALL_DIR to point to the plugin installation directory
-    -- This tells Steampipe where to find the installed plugins
-    if install_path and install_path ~= "" then
-        table.insert(env_vars, {
-            key = "STEAMPIPE_INSTALL_DIR",
-            value = install_path,
-        })
-    end
+    -- Set STEAMPIPE_INSTALL_DIR    -- Only set STEAMPIPE_INSTALL_DIR if it's not already set
+    -- This allows users to override the location if they want
+    -- Otherwise, steampipe will use its default ~/.steampipe location
+    -- We don't need to set it ourselves - just pass through if already set
 
     -- Note: Steampipe plugins are not executable binaries themselves.
     -- They are loaded by the main steampipe CLI when it runs.
-    -- Users should use: mise x steampipe -- steampipe query "..."
-    -- The STEAMPIPE_INSTALL_DIR environment variable tells steampipe
-    -- where to find the installed plugins.
+    -- Users should have steampipe CLI installed and can use:
+    --   steampipe query "..."
+    -- Or with mise:
+    --   mise x steampipe:plugin-name -- steampipe query "..."
 
     return {
         env_vars = env_vars,

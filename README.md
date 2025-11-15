@@ -15,10 +15,19 @@ This mise backend plugin allows you to install and manage Steampipe plugins usin
 - `steampipe-plugin:kubernetes` - Kubernetes plugin
 - And many more!
 
+**Important**: This plugin manages Steampipe plugins only. Install the Steampipe CLI separately using:
+```bash
+mise use -g ubi:turbot/steampipe
+```
+
+## How it works
+
+Plugins are installed using `steampipe plugin install` to steampipe's default location (`~/.steampipe`). You can customize the installation location by setting the `STEAMPIPE_INSTALL_DIR` environment variable before installing.
+
 ## Prerequisites
 
 - [mise](https://mise.jdx.dev) installed
-- [Steampipe](https://steampipe.io) installed (managed via mise or system-wide)
+- [Steampipe CLI](https://steampipe.io) installed (recommended: `mise use -g ubi:turbot/steampipe`)
 
 ## Installation
 
@@ -33,7 +42,7 @@ mise settings experimental=true
 ### Install the plugin
 
 ```bash
-mise plugin install steampipe-plugin https://github.com/zephraph/mise-steampipe-plugin
+mise plugin install steampipe-plugin https://github.com/zephraph/mise-steampipe
 ```
 
 ## Usage
@@ -54,7 +63,7 @@ mise install steampipe-plugin:aws@latest
 # Install specific version
 mise install steampipe-plugin:github@1.7.0
 
-# Install to .mise.toml
+# Add to .mise.toml
 mise use steampipe-plugin:aws@1.26.0
 ```
 
@@ -63,11 +72,13 @@ mise use steampipe-plugin:aws@1.26.0
 Steampipe plugins are database extensions, not standalone executables. Use them with the Steampipe CLI:
 
 ```bash
-# The STEAMPIPE_INSTALL_DIR environment variable is automatically set
-mise exec steampipe-plugin:github@1.7.0 -- steampipe query "select * from github_repository limit 5"
+# Install plugins
+mise use steampipe-plugin:github@1.7.0
+mise use steampipe-plugin:aws@1.26.0
 
-# Or use mise x for short
-mise x steampipe-plugin:github@1.7.0 -- steampipe query "select name, stargazers_count from github_repository"
+# Use steampipe normally - plugins will be available
+steampipe query "select * from github_repository limit 5"
+steampipe query "select * from aws_s3_bucket"
 ```
 
 ### Install multiple plugins
@@ -79,7 +90,6 @@ Create a `.mise.toml` file in your project:
 "steampipe-plugin:aws" = "1.26.0"
 "steampipe-plugin:github" = "1.7.0"
 "steampipe-plugin:kubernetes" = "0.30.0"
-steampipe = "2.3.2"
 ```
 
 Then install all at once:
@@ -88,29 +98,25 @@ Then install all at once:
 mise install
 ```
 
-### Project-local plugin installation
+### Custom installation location
 
-By default, plugins install to `.steampipe` in the current directory when using mise. This allows different projects to have different plugin versions:
+Set `STEAMPIPE_INSTALL_DIR` to customize where plugins are installed:
 
 ```bash
-cd my-aws-project
-mise use steampipe-plugin:aws@1.26.0
-# Plugins installed to my-aws-project/.steampipe/
-
-cd ../my-other-project  
-mise use steampipe-plugin:aws@1.25.0
-# Plugins installed to my-other-project/.steampipe/
+export STEAMPIPE_INSTALL_DIR=./my-steampipe-dir
+mise install steampipe-plugin:aws@1.26.0
+# Plugins will be installed to ./my-steampipe-dir
 ```
 
-## How it works
+Or in your `.mise.toml`:
 
-This backend plugin:
+```toml
+[env]
+STEAMPIPE_INSTALL_DIR = "./.steampipe"
 
-1. **Lists versions** by querying the GitHub API for releases from `turbot/steampipe-plugin-{name}` repositories
-2. **Installs plugins** using `steampipe plugin install` with a custom `--install-dir` 
-3. **Sets environment** by configuring `STEAMPIPE_INSTALL_DIR` to point to the installation directory
-
-Steampipe plugins are distributed as OCI (Open Container Initiative) images from [hub.steampipe.io](https://hub.steampipe.io) and developed under the [turbot](https://github.com/turbot) organization on GitHub.
+[tools]
+"steampipe-plugin:aws" = "1.26.0"
+```
 
 ## Supported Plugins
 
@@ -175,7 +181,7 @@ mise run ci
 - `metadata.lua` - Plugin metadata and configuration
 - `hooks/backend_list_versions.lua` - Fetches available versions from GitHub
 - `hooks/backend_install.lua` - Installs Steampipe plugins
-- `hooks/backend_exec_env.lua` - Sets up STEAMPIPE_INSTALL_DIR environment variable
+- `hooks/backend_exec_env.lua` - Environment variable setup
 - `mise-tasks/test` - Integration tests
 - `.github/workflows/ci.yml` - CI/CD pipeline
 
@@ -189,13 +195,13 @@ The plugin uses the GitHub API to list versions. If you hit rate limits:
 export GITHUB_TOKEN=your_personal_access_token
 ```
 
-### Steampipe not found
+### Steampipe CLI not found
 
-Make sure Steampipe is installed and available:
+Make sure Steampipe CLI is installed:
 
 ```bash
-# Install via mise
-mise use -g steampipe@latest
+# Install via mise (recommended)
+mise use -g ubi:turbot/steampipe
 
 # Or install via package manager
 brew install steampipe  # macOS

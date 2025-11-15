@@ -5,7 +5,7 @@ MISE_USE_VERSIONS_HOST = "0"
 actionlint = "latest"
 lefthook = "1.13.0"
 lua = "5.4"
-steampipe = "2.3.2"
+"ubi:turbot/steampipe" = "2.3.2"
 stylua = "latest"
 
 [settings]
