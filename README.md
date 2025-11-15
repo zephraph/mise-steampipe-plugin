@@ -1,315 +1,231 @@
-# mise backend plugin template
+# mise-steampipe-plugin
 
-This is a GitHub template for building a mise backend plugin using the vfox-style backend architecture.
+A [mise](https://mise.jdx.dev) backend plugin for managing [Steampipe](https://steampipe.io) plugins.
 
-## What are Backend Plugins?
+## What is Steampipe?
 
-Backend plugins in mise extend the standard tool plugin system to manage **multiple tools** using the `plugin:tool` format. They're perfect for:
+Steampipe is an open-source tool that lets you query cloud APIs, services, and more using SQL. It uses plugins to provide database-like interfaces to various APIs and services including AWS, Azure, GCP, GitHub, Kubernetes, and many more.
 
-- **Package managers** (npm, pip, cargo, gem)
-- **Tool families** (multiple related tools from one ecosystem)
-- **Custom installations** that need to manage many tools
+## What does this plugin do?
 
-Unlike tool plugins that manage one tool, backend plugins can install and manage multiple tools like `npm:prettier`, `npm:eslint`, `cargo:ripgrep`, etc.
+This mise backend plugin allows you to install and manage Steampipe plugins using mise's tool management system. Since Steampipe has 150+ plugins, this backend lets you manage them individually:
 
-## Using this template
+- `steampipe-plugin:aws` - AWS plugin
+- `steampipe-plugin:github` - GitHub plugin  
+- `steampipe-plugin:kubernetes` - Kubernetes plugin
+- And many more!
 
-### Option 1: Use GitHub's template feature (recommended)
-1. Click "Use this template" button on GitHub
-2. Name your repository (e.g., `mise-mybackend` or `vfox-mybackend`)
-3. Clone your new repository
-4. Follow the setup instructions below
+## Prerequisites
 
-### Option 2: Clone and modify
+- [mise](https://mise.jdx.dev) installed
+- [Steampipe](https://steampipe.io) installed (managed via mise or system-wide)
+
+## Installation
+
+### Enable experimental features
+
+Backend plugins require mise experimental features:
+
 ```bash
-git clone https://github.com/jdx/mise-backend-plugin-template mise-mybackend
-cd mise-mybackend
-rm -rf .git
-git init
+mise settings experimental=true
 ```
 
-## Setup Instructions
+### Install the plugin
 
-### 2. Implement the backend hooks
-
-Backend plugins require three main hooks:
-
-#### `hooks/backend_list_versions.lua`
-Lists available versions for a tool in your backend.
-
-```lua
-function PLUGIN:BackendListVersions(ctx)
-    local tool = ctx.tool
-    -- Your logic to fetch versions for the tool
-    -- Return: {versions = {"1.0.0", "1.1.0", "2.0.0"}}
-end
-```
-
-**Examples**:
-- **API-based**: Query npm registry, PyPI, crates.io APIs
-- **Command-based**: Run `npm view <tool> versions`, `pip index versions <tool>`
-- **File-based**: Parse registry files or manifests
-
-#### `hooks/backend_install.lua`
-Installs a specific version of a tool.
-
-```lua
-function PLUGIN:BackendInstall(ctx)
-    local tool = ctx.tool
-    local version = ctx.version
-    local install_path = ctx.install_path
-    -- Your logic to install the tool
-    -- Return: {}
-end
-```
-
-**Examples**:
-- **Package manager**: `npm install <tool>@<version>`, `pip install <tool>==<version>`
-- **Download & extract**: Download binary/archive and extract to install_path
-- **Build from source**: Clone repository, checkout version, build and install
-
-#### `hooks/backend_exec_env.lua`
-Sets up environment variables for a tool.
-
-```lua
-function PLUGIN:BackendExecEnv(ctx)
-    local install_path = ctx.install_path
-    -- Your logic to set up environment
-    -- Return: {env_vars = {{key = "PATH", value = install_path .. "/bin"}}}
-end
-```
-
-**Examples**:
-- **Basic**: Add `bin/` directory to PATH
-- **Complex**: Set tool-specific environment variables, library paths
-- **Ecosystem-specific**: Like `node_modules/.bin` for npm, site-packages for Python
-
-### 3. Platform considerations
-
-Your backend may need to handle different operating systems:
-
-```lua
--- Available in all hooks via RUNTIME object
-if RUNTIME.osType == "Darwin" then
-    -- macOS-specific logic
-elseif RUNTIME.osType == "Linux" then
-    -- Linux-specific logic
-elseif RUNTIME.osType == "Windows" then
-    -- Windows-specific logic
-end
-```
-
-### 4. Error handling
-
-Provide meaningful error messages:
-
-```lua
-function PLUGIN:BackendListVersions(ctx)
-    local tool = ctx.tool
-
-    if not tool or tool == "" then
-        error("Tool name cannot be empty")
-    end
-
-    -- ... your implementation ...
-
-    if #versions == 0 then
-        error("No versions found for " .. tool)
-    end
-
-    return {versions = versions}
-end
-```
-
-## Development Workflow
-
-### Setting up development environment
-
-1. Install pre-commit hooks (optional but recommended):
 ```bash
-hk install
+mise plugin install steampipe-plugin https://github.com/zephraph/mise-steampipe-plugin
 ```
 
-This sets up automatic linting and formatting on git commits.
+## Usage
 
-### Local Testing
+### List available versions
 
-1. Link your plugin for development:
 ```bash
-mise plugin link --force steampipe-plugin .
+mise ls-remote steampipe-plugin:aws
+mise ls-remote steampipe-plugin:github
 ```
 
-2. Test version listing:
+### Install a plugin
+
 ```bash
-mise ls-remote steampipe-plugin:<some-tool>
+# Install latest version
+mise install steampipe-plugin:aws@latest
+
+# Install specific version
+mise install steampipe-plugin:github@1.7.0
+
+# Install to .mise.toml
+mise use steampipe-plugin:aws@1.26.0
 ```
 
-3. Test installation:
+### Use with Steampipe
+
+Steampipe plugins are database extensions, not standalone executables. Use them with the Steampipe CLI:
+
 ```bash
-mise install steampipe-plugin:<some-tool>@latest
+# The STEAMPIPE_INSTALL_DIR environment variable is automatically set
+mise exec steampipe-plugin:github@1.7.0 -- steampipe query "select * from github_repository limit 5"
+
+# Or use mise x for short
+mise x steampipe-plugin:github@1.7.0 -- steampipe query "select name, stargazers_count from github_repository"
 ```
 
-4. Test execution:
+### Install multiple plugins
+
+Create a `.mise.toml` file in your project:
+
+```toml
+[tools]
+"steampipe-plugin:aws" = "1.26.0"
+"steampipe-plugin:github" = "1.7.0"
+"steampipe-plugin:kubernetes" = "0.30.0"
+steampipe = "2.3.2"
+```
+
+Then install all at once:
+
 ```bash
-mise exec steampipe-plugin:<some-tool>@latest -- <some-tool> --version
+mise install
 ```
 
-5. Run tests:
+### Project-local plugin installation
+
+By default, plugins install to `.steampipe` in the current directory when using mise. This allows different projects to have different plugin versions:
+
+```bash
+cd my-aws-project
+mise use steampipe-plugin:aws@1.26.0
+# Plugins installed to my-aws-project/.steampipe/
+
+cd ../my-other-project  
+mise use steampipe-plugin:aws@1.25.0
+# Plugins installed to my-other-project/.steampipe/
+```
+
+## How it works
+
+This backend plugin:
+
+1. **Lists versions** by querying the GitHub API for releases from `turbot/steampipe-plugin-{name}` repositories
+2. **Installs plugins** using `steampipe plugin install` with a custom `--install-dir` 
+3. **Sets environment** by configuring `STEAMPIPE_INSTALL_DIR` to point to the installation directory
+
+Steampipe plugins are distributed as OCI (Open Container Initiative) images from [hub.steampipe.io](https://hub.steampipe.io) and developed under the [turbot](https://github.com/turbot) organization on GitHub.
+
+## Supported Plugins
+
+All official Steampipe plugins are supported. See the complete list at [hub.steampipe.io](https://hub.steampipe.io/plugins).
+
+Common plugins include:
+- `aws` - Amazon Web Services
+- `azure` - Microsoft Azure
+- `gcp` - Google Cloud Platform
+- `github` - GitHub
+- `kubernetes` - Kubernetes
+- `slack` - Slack
+- `terraform` - Terraform
+- And 140+ more!
+
+## Plugin naming
+
+Plugins use the format `steampipe-plugin:<name>` where `<name>` is the plugin name from [hub.steampipe.io](https://hub.steampipe.io/plugins).
+
+The backend automatically handles the GitHub repository naming convention (`turbot/steampipe-plugin-{name}`).
+
+## Development
+
+### Local testing
+
+1. Clone this repository
+2. Link the plugin for development:
+   ```bash
+   mise plugin link --force steampipe-plugin .
+   ```
+
+3. Test version listing:
+   ```bash
+   mise ls-remote steampipe-plugin:aws
+   ```
+
+4. Test installation:
+   ```bash
+   mise install steampipe-plugin:github@1.7.0
+   ```
+
+### Run tests
+
 ```bash
 mise run test
 ```
 
-6. Run linting:
+### Run linters
+
 ```bash
 mise run lint
 ```
 
-7. Run full CI suite:
+### Run full CI suite
+
 ```bash
 mise run ci
 ```
 
-### Code Quality
-
-This template uses [hk](https://hk.jdx.dev) for modern linting and pre-commit hooks:
-
-- **Automatic formatting**: `stylua` formats Lua code
-- **Static analysis**: `luacheck` catches Lua issues
-- **GitHub Actions linting**: `actionlint` validates workflows
-- **Pre-commit hooks**: Runs all checks automatically on git commit
-
-Manual commands:
-```bash
-hk check      # Run all linters (same as mise run lint)
-hk fix        # Run linters and auto-fix issues
-```
-
-### Debugging
-
-Enable debug output:
-```bash
-mise --debug install steampipe-plugin:<tool>@<version>
-```
-
 ## Files
 
-- `metadata.lua` – Backend plugin metadata and configuration
-- `hooks/backend_list_versions.lua` – Lists available versions for tools
-- `hooks/backend_install.lua` – Installs specific versions of tools
-- `hooks/backend_exec_env.lua` – Sets up environment variables for tools
-- `.github/workflows/ci.yml` – GitHub Actions CI/CD pipeline
-- `mise.toml` – Development tools and configuration
-- `mise-tasks/` – Task scripts for testing
-- `hk.pkl` – Modern linting and pre-commit hook configuration
-- `.luacheckrc` – Lua linting configuration
-- `stylua.toml` – Lua formatting configuration
+- `metadata.lua` - Plugin metadata and configuration
+- `hooks/backend_list_versions.lua` - Fetches available versions from GitHub
+- `hooks/backend_install.lua` - Installs Steampipe plugins
+- `hooks/backend_exec_env.lua` - Sets up STEAMPIPE_INSTALL_DIR environment variable
+- `mise-tasks/test` - Integration tests
+- `.github/workflows/ci.yml` - CI/CD pipeline
 
-## Backend Examples
+## Troubleshooting
 
-### Package Manager Backend (npm-style)
-```lua
--- backend_list_versions.lua
-function PLUGIN:BackendListVersions(ctx)
-    local cmd = require("cmd")
-    local json = require("json")
-    local result = cmd.exec("mypm view " .. ctx.tool .. " versions --json")
-    return {versions = json.decode(result)}
-end
+### GitHub API rate limits
 
--- backend_install.lua
-function PLUGIN:BackendInstall(ctx)
-    local cmd = require("cmd")
-    cmd.exec("mypm install " .. ctx.tool .. "@" .. ctx.version .. " --prefix " .. ctx.install_path)
-    return {}
-end
+The plugin uses the GitHub API to list versions. If you hit rate limits:
 
--- backend_exec_env.lua
-function PLUGIN:BackendExecEnv(ctx)
-    return {
-        env_vars = {
-            {key = "PATH", value = ctx.install_path .. "/bin"}
-        }
-    }
-end
+```bash
+export GITHUB_TOKEN=your_personal_access_token
 ```
 
-### Binary Download Backend (GitHub releases-style)
-```lua
--- backend_list_versions.lua
-function PLUGIN:BackendListVersions(ctx)
-    local http = require("http")
-    local json = require("json")
-    local resp = http.get({url = "https://api.github.com/repos/owner/" .. ctx.tool .. "/releases"})
-    local releases = json.decode(resp.body)
-    local versions = {}
-    for _, release in ipairs(releases) do
-        table.insert(versions, release.tag_name:gsub("^v", ""))
-    end
-    return {versions = versions}
-end
+### Steampipe not found
 
--- backend_install.lua
-function PLUGIN:BackendInstall(ctx)
-    local platform = RUNTIME.osType:lower()
-    local arch = RUNTIME.archType
-    local url = "https://github.com/owner/" .. ctx.tool .. "/releases/download/v" .. ctx.version ..
-                "/" .. ctx.tool .. "-" .. platform .. "-" .. arch .. ".tar.gz"
+Make sure Steampipe is installed and available:
 
-    local http = require("http")
-    local temp_file = ctx.install_path .. "/tool.tar.gz"
-    http.download({url = url, output = temp_file})
+```bash
+# Install via mise
+mise use -g steampipe@latest
 
-    local cmd = require("cmd")
-    cmd.exec("cd " .. ctx.install_path .. " && tar -xzf tool.tar.gz")
-    cmd.exec("rm " .. temp_file)
-    return {}
-end
+# Or install via package manager
+brew install steampipe  # macOS
 ```
 
-## Real-World Examples
+### Installation timeout
 
-- [vfox-npm](https://github.com/jdx/vfox-npm) - Backend for npm packages
-- Study existing mise backends: npm, cargo, pip, gem
+Steampipe plugin installations can take time as they download OCI images. The default timeout should be sufficient, but if you experience issues, check your network connection.
 
-## Context Variables Reference
+## Contributing
 
-### BackendListVersions Context
-| Variable | Type | Description | Example |
-|----------|------|-------------|---------|
-| `ctx.tool` | string | Tool name | `"prettier"` |
+Contributions are welcome! Please:
 
-### BackendInstall and BackendExecEnv Context
-| Variable | Type | Description | Example |
-|----------|------|-------------|---------|
-| `ctx.tool` | string | Tool name | `"prettier"` |
-| `ctx.version` | string | Tool version | `"3.0.0"` |
-| `ctx.install_path` | string | Installation directory | `"/home/user/.local/share/mise/installs/npm/prettier/3.0.0"` |
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run `mise run ci` to ensure tests pass
+5. Submit a pull request
 
-### Available Lua Modules
+## Resources
 
-Backend plugins have access to these built-in modules:
-
-- `cmd` - Execute shell commands
-- `http` - HTTP client for downloads and API calls
-- `json` - JSON parsing and encoding
-- `file` - File system operations
-
-## Publishing
-
-1. Ensure all tests pass: `mise run ci`
-2. Create a GitHub repository for your plugin
-3. Push your code
-4. Test with: `mise plugin install mybackend https://github.com/user/mise-mybackend`
-5. (Optional) Request to transfer to [mise-plugins](https://github.com/mise-plugins) organization
-6. Add to the [mise registry](https://github.com/jdx/mise/blob/main/registry.toml) via PR
-
-## Documentation
-
-- [Backend Plugin Development](https://mise.jdx.dev/backend-plugin-development.html) - Complete guide
-- [Backend Architecture](https://mise.jdx.dev/dev-tools/backend_architecture.html) - How backends work
-- [Lua modules reference](https://mise.jdx.dev/plugin-lua-modules.html) - Available modules
-- [mise-plugins organization](https://github.com/mise-plugins) - Community plugins
+- [Steampipe Documentation](https://steampipe.io/docs)
+- [Steampipe Hub](https://hub.steampipe.io) - Plugin directory
+- [mise Documentation](https://mise.jdx.dev)
+- [mise Backend Plugin Development](https://mise.jdx.dev/backend-plugin-development.html)
 
 ## License
 
 MIT
+
+## Author
+
+zephraph
