@@ -1,5 +1,5 @@
 -- hooks/backend_exec_env.lua
--- Sets up environment variables for a tool
+-- Sets up environment variables for a Steampipe plugin
 -- Documentation: https://mise.jdx.dev/backend-plugin-development.html#backendexecenv
 
 function PLUGIN:BackendExecEnv(ctx)
@@ -7,76 +7,22 @@ function PLUGIN:BackendExecEnv(ctx)
     local tool = ctx.tool
     local version = ctx.version
 
-    -- Basic PATH setup (most common case)
-    local file = require("file")
-    local bin_path = file.join_path(install_path, "bin")
+    local env_vars = {}
 
-    local env_vars = {
-        -- Add tool's bin directory to PATH
-        { key = "PATH", value = bin_path },
-    }
-
-    -- Example: Tool-specific environment variables
-    --[[
-    -- Add tool-specific home directory
-    table.insert(env_vars, {
-        key = tool:upper() .. "_HOME",
-        value = install_path
-    })
-
-    -- Add version environment variable
-    table.insert(env_vars, {
-        key = tool:upper() .. "_VERSION",
-        value = version
-    })
-
-    -- Add configuration directory
-    table.insert(env_vars, {
-        key = tool:upper() .. "_CONFIG",
-        value = file.join_path(install_path, "config")
-    })
-    --]]
-
-    -- Example: Backend-specific paths (like node_modules for npm)
-    --[[
-    -- For npm-like backends that install to subdirectories
-    local modules_bin = file.join_path(install_path, "node_modules", ".bin")
-    table.insert(env_vars, {key = "PATH", value = modules_bin})
-
-    -- For Python-like backends with site-packages
-    local site_packages = file.join_path(install_path, "lib", "python3.x", "site-packages")
-    table.insert(env_vars, {key = "PYTHONPATH", value = site_packages})
-
-    -- For Rust-like backends with cargo binaries
-    local cargo_bin = file.join_path(install_path, ".cargo", "bin")
-    table.insert(env_vars, {key = "PATH", value = cargo_bin})
-    --]]
-
-    -- Example: Library paths for compiled tools
-    --[[
-    local lib_path = file.join_path(install_path, "lib")
-    local lib64_path = file.join_path(install_path, "lib64")
-
-    if RUNTIME.osType == "Linux" then
-        table.insert(env_vars, {key = "LD_LIBRARY_PATH", value = lib_path})
-        table.insert(env_vars, {key = "LD_LIBRARY_PATH", value = lib64_path})
-    elseif RUNTIME.osType == "Darwin" then
-        table.insert(env_vars, {key = "DYLD_LIBRARY_PATH", value = lib_path})
+    -- Set STEAMPIPE_INSTALL_DIR to point to the plugin installation directory
+    -- This tells Steampipe where to find the installed plugins
+    if install_path and install_path ~= "" then
+        table.insert(env_vars, {
+            key = "STEAMPIPE_INSTALL_DIR",
+            value = install_path,
+        })
     end
-    --]]
 
-    -- Example: Include paths for development tools
-    --[[
-    local include_path = file.join_path(install_path, "include")
-    table.insert(env_vars, {key = "C_INCLUDE_PATH", value = include_path})
-    table.insert(env_vars, {key = "CPLUS_INCLUDE_PATH", value = include_path})
-    --]]
-
-    -- Example: Manual pages path
-    --[[
-    local man_path = file.join_path(install_path, "share", "man")
-    table.insert(env_vars, {key = "MANPATH", value = man_path})
-    --]]
+    -- Note: Steampipe plugins are not executable binaries themselves.
+    -- They are loaded by the main steampipe CLI when it runs.
+    -- Users should use: mise x steampipe -- steampipe query "..."
+    -- The STEAMPIPE_INSTALL_DIR environment variable tells steampipe
+    -- where to find the installed plugins.
 
     return {
         env_vars = env_vars,

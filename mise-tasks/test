@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-#MISE description="Run backend plugin tests - test plugin linking and basic functionality"
 set -euo pipefail
 
 # Link the plugin for testing
@@ -8,35 +7,55 @@ mise plugin link --force steampipe-plugin .
 # Clear cache to ensure fresh testing
 mise cache clear
 
-# Test that the plugin can list tools (this should work even if no tools are available)
 echo "Testing plugin linking and basic functionality..."
 
-# Try to list available versions for a test tool
-# Note: This will likely fail until you implement the backend methods
-# Replace github with a real tool name your backend supports
+# Test with the GitHub Steampipe plugin
 TEST_TOOL="github"
 
 echo "Testing version listing for ${TEST_TOOL}..."
-if mise ls-remote steampipe-plugin:${TEST_TOOL} 2>/dev/null; then
+if mise ls-remote steampipe-plugin:${TEST_TOOL} 2>/dev/null | head -5; then
     echo "✓ Version listing works"
 else
-    echo "⚠ Version listing failed - implement backend_list_versions.lua for your backend"
+    echo "✗ Version listing failed"
+    exit 1
 fi
 
-# Test installation if versions are available
+# Test installation
 echo "Testing installation..."
-if mise install steampipe-plugin:${TEST_TOOL}@latest 2>/dev/null; then
+if mise install steampipe-plugin:${TEST_TOOL}@1.7.0 2>/dev/null; then
     echo "✓ Installation works"
 
-    # Test that the tool can be executed
-    if mise exec steampipe-plugin:${TEST_TOOL}@latest -- ${TEST_TOOL} --version 2>/dev/null; then
-        echo "✓ Tool execution works"
+    # Note: Steampipe plugins are not standalone executables.
+    # They are loaded by the main steampipe CLI.
+    # We can verify the installation by checking if the plugin files exist.
+    INSTALL_PATH=$(mise where steampipe-plugin:${TEST_TOOL}@1.7.0)
+
+    if [ -d "$INSTALL_PATH" ]; then
+        echo "✓ Plugin installed to: $INSTALL_PATH"
+
+        # Check if the plugins directory exists
+        if [ -d "$INSTALL_PATH/plugins" ]; then
+            echo "✓ Plugins directory created"
+        else
+            echo "⚠ Plugins directory not found at $INSTALL_PATH/plugins"
+        fi
+
+        # Check if STEAMPIPE_INSTALL_DIR is set correctly
+        STEAMPIPE_DIR=$(mise exec steampipe-plugin:${TEST_TOOL}@1.7.0 -- sh -c 'echo $STEAMPIPE_INSTALL_DIR')
+        if [ "$STEAMPIPE_DIR" = "$INSTALL_PATH" ]; then
+            echo "✓ STEAMPIPE_INSTALL_DIR environment variable set correctly"
+        else
+            echo "⚠ STEAMPIPE_INSTALL_DIR not set correctly. Expected: $INSTALL_PATH, Got: $STEAMPIPE_DIR"
+        fi
     else
-        echo "⚠ Tool execution failed - check backend_exec_env.lua implementation"
+        echo "✗ Installation path not found"
+        exit 1
     fi
 else
-    echo "⚠ Installation failed - implement backend_install.lua for your backend"
+    echo "✗ Installation failed"
+    exit 1
 fi
 
-echo "✓ Basic plugin structure tests completed"
-echo "Note: Replace github with a real tool and implement the backend methods"
+echo ""
+echo "✓ All tests passed!"
+echo ""

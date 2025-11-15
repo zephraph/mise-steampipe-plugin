@@ -1,5 +1,5 @@
 -- hooks/backend_install.lua
--- Installs a specific version of a tool
+-- Installs a specific version of a Steampipe plugin
 -- Documentation: https://mise.jdx.dev/backend-plugin-development.html#backendinstall
 
 function PLUGIN:BackendInstall(ctx)
@@ -14,90 +14,51 @@ function PLUGIN:BackendInstall(ctx)
     if not version or version == "" then
         error("Version cannot be empty")
     end
+
+    -- Default install path to CWD/.steampipe if not provided
     if not install_path or install_path == "" then
-        error("Install path cannot be empty")
+        local cwd = os.getenv("PWD") or "."
+        install_path = cwd .. "/.steampipe"
     end
 
-    -- Create installation directory
     local cmd = require("cmd")
-    cmd.exec("mkdir -p " .. install_path)
 
-    -- Example implementations (choose/modify based on your backend):
+    -- Find steampipe binary
+    -- First try to use mise to locate steampipe
+    local steampipe_path = "steampipe" -- fallback to PATH
+    local which_result = cmd.exec(
+        "command -v steampipe 2>/dev/null || mise where steampipe 2>/dev/null | xargs -I {} echo {}/bin/steampipe"
+    )
 
-    -- Example 1: Package manager installation (like npm, pip)
-    local install_cmd = "steampipe plugin install " .. tool .. "@" .. version .. " --installtarget " .. install_path
+    if which_result and which_result ~= "" and not which_result:match("not found") then
+        steampipe_path = which_result:gsub("%s+$", "") -- trim whitespace
+    end
+
+    -- Construct the plugin identifier with version
+    -- Steampipe format: [registry/org/]name[@version]
+    -- The tool name from mise will be just the plugin name (e.g., "aws")
+    -- We want to install it as: aws@version
+    local plugin_spec = tool .. "@" .. version
+
+    -- Build the install command with --install-dir flag
+    -- Using --skip-config to avoid creating default config files
+    local install_cmd = steampipe_path
+        .. " plugin install --install-dir "
+        .. install_path
+        .. " --skip-config "
+        .. plugin_spec
+
     local result = cmd.exec(install_cmd)
 
-    if result:match("error") or result:match("failed") then
+    -- Check for errors in the output
+    if result:match("[Ee]rror") or result:match("[Ff]ailed") then
         error("Failed to install " .. tool .. "@" .. version .. ": " .. result)
     end
 
-    -- Example 2: Download and extract from URL
-    --[[
-    local http = require("http")
-    local file = require("file")
-
-    -- Construct download URL (adjust based on your backend's URL pattern)
-    local platform = RUNTIME.osType:lower()
-    local arch = RUNTIME.archType
-    local download_url = "https://releases.steampipe-plugin.org/" .. tool .. "/" .. version .. "/" .. tool .. "-" .. platform .. "-" .. arch .. ".tar.gz"
-
-    -- Download the tool
-    local temp_file = install_path .. "/" .. tool .. ".tar.gz"
-    local resp, err = http.download({
-        url = download_url,
-        output = temp_file
-    })
-
-    if err then
-        error("Failed to download " .. tool .. "@" .. version .. ": " .. err)
+    -- Verify installation succeeded
+    if not result:match("Installed") and not result:match("installed") then
+        error("Installation may have failed for " .. tool .. "@" .. version .. ". Output: " .. result)
     end
-
-    -- Extract the archive
-    cmd.exec("cd " .. install_path .. " && tar -xzf " .. temp_file)
-    cmd.exec("rm " .. temp_file)
-
-    -- Set executable permissions
-    cmd.exec("chmod +x " .. install_path .. "/bin/" .. tool)
-    --]]
-
-    -- Example 3: Build from source
-    --[[
-    local git_url = "https://github.com/owner/" .. tool .. ".git"
-
-    -- Clone the repository
-    cmd.exec("git clone " .. git_url .. " " .. install_path .. "/src")
-    cmd.exec("cd " .. install_path .. "/src && git checkout " .. version)
-
-    -- Build the tool (adjust based on build system)
-    local build_result = cmd.exec("cd " .. install_path .. "/src && make install PREFIX=" .. install_path)
-
-    if build_result:match("error") then
-        error("Failed to build " .. tool .. "@" .. version)
-    end
-
-    -- Clean up source
-    cmd.exec("rm -rf " .. install_path .. "/src")
-    --]]
-
-    -- Platform-specific installation logic
-    --[[
-    if RUNTIME.osType == "Darwin" then
-        -- macOS-specific installation
-        local macos_cmd = "steampipe-plugin install-macos " .. tool .. "@" .. version .. " " .. install_path
-        cmd.exec(macos_cmd)
-    elseif RUNTIME.osType == "Linux" then
-        -- Linux-specific installation
-        local linux_cmd = "steampipe-plugin install-linux " .. tool .. "@" .. version .. " " .. install_path
-        cmd.exec(linux_cmd)
-    elseif RUNTIME.osType == "Windows" then
-        -- Windows-specific installation
-        local windows_cmd = "steampipe-plugin install-windows " .. tool .. "@" .. version .. " " .. install_path
-        cmd.exec(windows_cmd)
-    else
-        error("Unsupported platform: " .. RUNTIME.osType)
-    end
-    --]]
 
     return {}
 end
