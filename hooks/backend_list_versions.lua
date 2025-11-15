@@ -51,7 +51,7 @@ function PLUGIN:BackendListVersions(ctx)
 
     if resp.status_code == 404 then
         error("Plugin '" ..
-        tool .. "' not found. Make sure the repository exists at https://github.com/" .. org .. "/" .. repo_name)
+            tool .. "' not found. Make sure the repository exists at https://github.com/" .. org .. "/" .. repo_name)
     end
 
     if resp.status_code == 403 then
@@ -86,5 +86,12 @@ function PLUGIN:BackendListVersions(ctx)
         error("No semantic versions found for " .. tool .. " at https://github.com/" .. org .. "/" .. repo_name)
     end
 
-    return { versions = versions }
+    -- Reverse the versions array so oldest is first, newest is last
+    -- GitHub API returns newest first, but mise expects oldest first
+    local reversed = {}
+    for i = #versions, 1, -1 do
+        table.insert(reversed, versions[i])
+    end
+
+    return { versions = reversed }
 end
